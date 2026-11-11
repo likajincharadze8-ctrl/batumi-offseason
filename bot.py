@@ -1,14 +1,18 @@
 """Batumi Off-Season - prototype AI career & benefits navigator (Telegram).
 Prototype only: demo knowledge base, in-memory storage. Not for real personal data."""
-import json, os, threading, time, logging
+import json, os, re, io, threading, time, logging
 from collections import defaultdict
 from flask import Flask
 from openai import OpenAI
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (Application, CommandHandler, MessageHandler, ContextTypes, filters,
+                          ConversationHandler, CallbackQueryHandler)
+from docx import Document
+from docx.shared import Pt
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+ADVISOR_CHAT_ID = os.environ.get("ADVISOR_CHAT_ID")  # Telegram chat that plays "City Hall advisor" in the demo
 # Free option: Google Gemini (key from aistudio.google.com, no card). Paid option: OpenAI.
 if os.environ.get("GEMINI_API_KEY"):
     client = OpenAI(api_key=os.environ["GEMINI_API_KEY"],
@@ -80,21 +84,117 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     history[cid].append({"role": "assistant", "content": answer})
     await update.message.reply_text(answer)
 
-async def cv(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    cid = update.effective_chat.id
-    stats["cvs_drafted"] += 1
-    await ctx.bot.send_chat_action(cid, "typing")
-    out = ask_llm(cid, "Draft a short one-page CV for me from our conversation, in my language. Use [brackets] for anything I have not told you. Do not invent experience.")
-    await update.message.reply_text(out)
+# ---------- /cv : short Q&A, then a Word CV file ----------
+CV_NAME, CV_PHONE, CV_EXP, CV_EDU = range(4)
+CVQ = {
+ "ქართული": ["რეზიუმესთვის რამდენიმე კითხვა 📝\n1/4. შენი სახელი და გვარი?",
+             "2/4. ტელეფონი ან ელფოსტა, რომელზეც დაგიკავშირდნენ?",
+             "3/4. ჩამოთვალე სამუშაო გამოცდილება: სად, რა თანამდებობაზე და რომელ წლებში. მაგ.: „კაფე X, ოფიციანტი, 2023–2026“",
+             "4/4. განათლება ან კურსები (თუ გაქვს). თუ არა, დაწერე „არა“."],
+ "Русский": ["Несколько вопросов для резюме 📝\n1/4. Ваше имя и фамилия?",
+             "2/4. Телефон или email для связи?",
+             "3/4. Опыт работы: где, кем и в какие годы. Например: «Кафе X, официант, 2023–2026»",
+             "4/4. Образование или курсы (если есть). Если нет, напишите «нет»."],
+ "English": ["A few questions for your CV 📝\n1/4. Your full name?",
+             "2/4. Phone or email where employers can reach you?",
+             "3/4. Your work experience: where, what role, which years. E.g. 'Cafe X, waiter, 2023-2026'",
+             "4/4. Education or courses (if any). If none, write 'none'."],
+}
+def L(cid): return lang_of.get(cid, "ქართული")
 
-async def advisor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def cv_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data["cv"] = {}
+    await update.message.reply_text(CVQ[L(update.effective_chat.id)][0])
+    return CV_NAME
+
+def cv_step(key, nxt, qi):
+    async def h(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        ctx.user_data["cv"][key] = update.message.text
+        await update.message.reply_text(CVQ[L(update.effective_chat.id)][qi])
+        return nxt
+    return h
+
+def parse_json(txt):
+    m = re.search(r"\{.*\}", txt, re.S)
+    return json.loads(m.group(0)) if m else {}
+
+def build_docx(d):
+    doc = Document()
+    st = doc.styles["Normal"]; st.font.name = "Arial"; st.font.size = Pt(11)
+    doc.add_heading(d.get("name", ""), level=0)
+    doc.add_paragraph(d.get("contact", ""))
+    def section(title, items):
+        if items:
+            doc.add_heading(title, level=1)
+            for it in items:
+                doc.add_paragraph(it, style="List Bullet")
+    if d.get("summary"):
+        doc.add_heading(d.get("h_summary", "Profile"), level=1); doc.add_paragraph(d["summary"])
+    exp = [f"{e.get('role','')} — {e.get('place','')} ({e.get('period','')}). {e.get('details','')}".strip()
+           for e in d.get("experience", [])]
+    section(d.get("h_experience", "Experience"), exp)
+    section(d.get("h_skills", "Skills"), d.get("skills", []))
+    section(d.get("h_languages", "Languages"), d.get("languages", []))
+    section(d.get("h_education", "Education"), d.get("education", []))
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0); return buf
+
+async def cv_finish(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
+    ctx.user_data["cv"]["education"] = update.message.text
+    stats["cvs_drafted"] += 1
+    await ctx.bot.send_chat_action(cid, "upload_document")
+    prompt = ("Create a CV as JSON only, no other text, in the language: " + L(cid) + ". "
+              "Use ONLY facts from the answers and our conversation; never invent employers, dates or degrees. "
+              "Keys: name, contact, summary (2 sentences), experience (list of {role, place, period, details}), "
+              "skills (list), languages (list), education (list), and section titles h_summary, h_experience, "
+              "h_skills, h_languages, h_education in that language. Answers: " + json.dumps(ctx.user_data["cv"], ensure_ascii=False))
+    try:
+        data = parse_json(ask_llm(cid, prompt))
+        buf = build_docx(data)
+        safe = re.sub(r"[^\w]+", "_", data.get("name", "CV")) or "CV"
+        await update.message.reply_document(document=buf, filename=f"CV_{safe}.docx",
+                                            caption="📄 CV / რეზიუმე — გადაამოწმე და საჭიროებისამებრ შეასწორე.")
+    except Exception as e:
+        logging.exception(e)
+        await update.message.reply_text("Sorry, the CV could not be created. Please try /cv again.")
+    return ConversationHandler.END
+
+async def cv_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("OK")
+    return ConversationHandler.END
+
+# ---------- /advisor : consent, summary, handoff to "City Hall advisor" chat ----------
+CONSENT = {
+ "ქართული": ("გინდა, მერიის კონსულტანტმა მიიღოს შენი საუბრის მოკლე შეჯამება, რომ დაგიკავშირდეს?", "✅ დიახ", "❌ არა"),
+ "Русский": ("Передать консультанту мэрии краткое резюме разговора, чтобы он с вами связался?", "✅ Да", "❌ Нет"),
+ "English": ("Do you agree to share a short summary of our chat with a City Hall advisor so they can contact you?", "✅ Yes", "❌ No"),
+}
+async def advisor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q, yes, no = CONSENT[L(update.effective_chat.id)]
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(yes, callback_data="adv_yes"), InlineKeyboardButton(no, callback_data="adv_no")]])
+    await update.message.reply_text(q, reply_markup=kb)
+
+async def advisor_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query; await query.answer()
+    cid = query.message.chat.id
+    if query.data == "adv_no":
+        await query.edit_message_text("OK 👍 /advisor"); return
     stats["advisor_handoffs"] += 1
-    advisor_requests.append({"time": time.strftime("%Y-%m-%d %H:%M"), "lang": lang_of.get(cid, "?")})
-    await update.message.reply_text(
-        "✅ Demo: your request for a City Hall advisor is recorded. In the real pilot, an advisor would receive a short summary "
-        "of your situation (only with your consent) and contact you to book a time.\n\n"
-        "✅ დემო: მერიის კონსულტანტთან შეხვედრის მოთხოვნა მიღებულია. რეალურ პილოტში კონსულტანტი შენი თანხმობით მიიღებს მოკლე შეჯამებას და დაგიკავშირდება.")
+    user = query.from_user
+    contact = f"@{user.username}" if user.username else user.full_name
+    summary = ask_llm(cid, "Write a 5-line summary of my situation for a City Hall employment advisor, in Georgian: "
+                           "last job, skills and languages, constraints, what I am looking for, programs that may fit (preliminary). "
+                           "Facts from our conversation only.")
+    advisor_requests.append({"time": time.strftime("%Y-%m-%d %H:%M"), "lang": L(cid), "summary": summary})
+    if ADVISOR_CHAT_ID:
+        await ctx.bot.send_message(int(ADVISOR_CHAT_ID),
+            f"📥 ახალი მოთხოვნა კონსულტაციაზე\nმომხმარებელი: {contact}\nენა: {L(cid)}\n\n{summary}")
+    await query.edit_message_text(
+        "✅ მოთხოვნა გაიგზავნა. მერიის კონსულტანტი დაგიკავშირდება.\n"
+        "✅ Request sent. A City Hall advisor will contact you.\n\n(Prototype: requests go to the project team.)")
+
+async def myid(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"Your chat ID: {update.effective_chat.id}")
 
 async def delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     history.pop(update.effective_chat.id, None)
@@ -105,7 +205,7 @@ web = Flask(__name__)
 @web.route("/")
 def dashboard():
     rows = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in sorted(stats.items()))
-    reqs = "".join(f"<li>{r['time']} — {r['lang']}</li>" for r in advisor_requests[-20:])
+    reqs = "".join(f"<li><b>{r['time']}</b> — {r['lang']}<br><pre style='white-space:pre-wrap'>{r.get('summary','')}</pre></li>" for r in advisor_requests[-20:])
     return f"""<html><head><meta charset='utf-8'><title>Batumi Off-Season — staff dashboard (demo)</title>
     <style>body{{font-family:Arial;margin:40px;max-width:720px}}td{{padding:6px 16px;border-bottom:1px solid #ddd}}</style></head>
     <body><h1>Batumi Off-Season</h1><p>City Hall staff dashboard — prototype. Anonymized totals only.</p>
@@ -118,9 +218,18 @@ def run_web():
 def main():
     threading.Thread(target=run_web, daemon=True).start()
     app = Application.builder().token(TOKEN).build()
+    txt = filters.TEXT & ~filters.COMMAND
+    app.add_handler(ConversationHandler(
+        entry_points=[CommandHandler("cv", cv_start)],
+        states={CV_NAME: [MessageHandler(txt, cv_step("name", CV_PHONE, 1))],
+                CV_PHONE: [MessageHandler(txt, cv_step("contact", CV_EXP, 2))],
+                CV_EXP: [MessageHandler(txt, cv_step("experience", CV_EDU, 3))],
+                CV_EDU: [MessageHandler(txt, cv_finish)]},
+        fallbacks=[CommandHandler("cancel", cv_cancel)]))
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cv", cv))
     app.add_handler(CommandHandler("advisor", advisor))
+    app.add_handler(CallbackQueryHandler(advisor_answer, pattern="^adv_"))
+    app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("delete", delete))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.run_polling()

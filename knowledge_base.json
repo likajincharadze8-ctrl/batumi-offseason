@@ -1,0 +1,83 @@
+{
+  "_note": "PROTOTYPE DEMO DATA. Program details must be verified with Batumi City Hall before any real use.",
+  "programs": [
+    {
+      "id": "ssa-registration",
+      "name_ka": "სამუშაოს მაძიებლად რეგისტრაცია (დასაქმების ხელშეწყობის სახელმწიფო სააგენტო)",
+      "name_en": "Jobseeker registration - State Employment Support Agency",
+      "who": "Unemployed or job-seeking residents of Georgia, 16+",
+      "what": "Registration as a jobseeker, job matching with employers, career consultation, access to state training and retraining programs for jobseekers.",
+      "how": "Register online at worknet.gov.ge or in person at a Public Service Hall / agency office in Batumi. Bring ID card.",
+      "source": "State programs for jobseekers' vocational training and retraining (matsne.gov.ge)"
+    },
+    {
+      "id": "ssa-retraining",
+      "name_ka": "სამუშაოს მაძიებელთა პროფესიული მომზადება და გადამზადება",
+      "name_en": "State vocational training and retraining for jobseekers",
+      "who": "Registered jobseekers",
+      "what": "Free short vocational training and retraining courses in demand professions, delivered through authorized colleges and training providers.",
+      "how": "First register as a jobseeker (see above), then apply for a course through the agency consultant.",
+      "source": "Government of Georgia state program on vocational training, retraining and upskilling of jobseekers (matsne.gov.ge)"
+    },
+    {
+      "id": "bsu-lifelong",
+      "name_ka": "ბსუ-ს პროფესიული პროგრამებისა და უწყვეტი განათლების ცენტრი",
+      "name_en": "BSU Center for Vocational Programs and Lifelong Learning",
+      "who": "Adults and young people who want a profession or new qualification",
+      "what": "Vocational programs, professional training/retraining and short lifelong-learning courses.",
+      "how": "Contact the center at 15 Leonidze St., Batumi, or check bsu.edu.ge for current admissions.",
+      "source": "bsu.edu.ge"
+    },
+    {
+      "id": "black-sea-college",
+      "name_ka": "შავი ზღვის კოლეჯი (ბათუმი)",
+      "name_en": "Black Sea College, Batumi",
+      "who": "Young people and adults seeking vocational qualifications, including hospitality and tourism",
+      "what": "Vocational programs closely linked with employers; high demand from applicants.",
+      "how": "Apply during the vocational admission period; ask the college about short courses.",
+      "source": "UNDP Georgia story on vocational training"
+    },
+    {
+      "id": "anri-maritime",
+      "name_ka": "ბათუმის უმაღლესი საზღვაო საინჟინრო სკოლა „ანრი“",
+      "name_en": "Batumi Higher Marine Engineering School 'Anri'",
+      "who": "People interested in working as seafarers",
+      "what": "Vocational maritime programs, seafarer training, retraining and certification. Year-round career path, not seasonal.",
+      "how": "Visit the school (Davit Mamuladze St. 29, Batumi), Mon-Fri 10:00-17:30.",
+      "source": "infobatumi.ge"
+    },
+    {
+      "id": "adjara-guides",
+      "name_ka": "დამწყები გიდების მომზადების პროგრამა (აჭარის ტურიზმის დეპარტამენტი)",
+      "name_en": "Training program for beginner tour guides (Adjara Tourism Department)",
+      "who": "People who want to work as tour guides, especially with language skills",
+      "what": "Professional training for beginner tourist guides launched in Batumi in 2026. Good option for off-season upskilling.",
+      "how": "Check the Adjara Tourism Department announcements for the next intake.",
+      "source": "Georgia Today, April 2026"
+    },
+    {
+      "id": "batumi-social",
+      "name_ka": "ბათუმის მუნიციპალიტეტის სოციალური უზრუნველყოფის პროგრამები",
+      "name_en": "Batumi Municipality social support programs",
+      "who": "Batumi residents in vulnerable situations: socially vulnerable families, people with disabilities, families with children with special needs, and others defined by each sub-program",
+      "what": "Municipal social support sub-programs funded by the 2026 municipal budget ('Social Security' program).",
+      "how": "Apply at Batumi City Hall, 25 Luka Asatiani St. Eligibility depends on the specific sub-program; a City Hall advisor confirms.",
+      "source": "Batumi City Hall orders, 2026 (batumi.gov.ge)"
+    },
+    {
+      "id": "tsa",
+      "name_ka": "საარსებო შემწეობა (სოციალური მომსახურების სააგენტო)",
+      "name_en": "Targeted social assistance (Social Service Agency)",
+      "who": "Low-income families registered in the database of socially vulnerable families",
+      "what": "Monthly subsistence allowance based on a household rating score.",
+      "how": "Request a household assessment through the Social Service Agency or a Public Service Hall.",
+      "source": "General national program; verify current rules"
+    }
+  ],
+  "sample_jobs": [
+    {"title": "Hotel receptionist (year-round)", "where": "Batumi, city-centre hotel", "needs": "English or Russian, customer service", "note": "SAMPLE LISTING FOR DEMO"},
+    {"title": "Junior accountant assistant", "where": "Batumi, trading company", "needs": "Basic Excel, attention to detail; training provided", "note": "SAMPLE LISTING FOR DEMO"},
+    {"title": "Customer support (remote, Russian/English)", "where": "Remote", "needs": "Good written Russian or English", "note": "SAMPLE LISTING FOR DEMO"},
+    {"title": "Kitchen staff (year-round restaurant)", "where": "Batumi Old Town", "needs": "Experience in food service", "note": "SAMPLE LISTING FOR DEMO"}
+  ]
+}
